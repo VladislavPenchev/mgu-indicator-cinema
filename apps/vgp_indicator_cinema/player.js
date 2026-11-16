@@ -1,5 +1,6 @@
 'use strict';
 const zlib = require('zlib');
+const {composite} = require('./composite');
 const {ClusterRender} = require('./cluster_render_client');
 const W = 384, H = 216, FPS = 12, BYTES = W * H * 3 / 2;
 const clips = {};
@@ -22,13 +23,15 @@ class Player {
         this.cr.on('layer', (ref, state, reason) => { if (state === 'error') this.status = 'Renderer: ' + reason; });
         this.cr.connect();
     }
-    play(name) {
-        this.stop(); const opt = this.options();
-        if (!opt[name]) { this.status = name + ' disabled'; return; }
-        if (!this.cr.ready) { this.status = 'Cluster renderer not connected'; return; }
-        let raw; try { raw = load(name); } catch (e) { this.status = e.message; return; }
+    play(name, done) {
+        this.clearTimer(); const opt = this.options();
+        if (!opt[name]) { this.status = name + ' disabled'; return false; }
+        if (!this.cr.ready) { this.status = 'Cluster renderer not connected'; return false; }
+        let raw; try { raw = load(name); } catch (e) { this.status = e.message; return false; }
+        if (!this.leftPose) this.leftPose=load('left').slice(0,BYTES);
+        if (!this.rightPose) this.rightPose=load('left').slice(0,BYTES);
         const destinations = opt.target === 'both' ? ['map','hud'] : [opt.target];
-        destinations.forEach((target) => {
+        if (!this.refs.length) destinations.forEach((target) => {
             // Small independent layer, never whole-cluster panel. HUD yields to stock lists.
             const hud = target === 'hud';
             this.refs.push(this.cr.video({target, klass:'overlay', z:50, x:hud?144:160, y:hud?96:24,
@@ -36,16 +39,30 @@ class Player {
                 exclusive:true, contend:!hud, yield:true, guide_hold:false, stall_ms:1200, pan_blocks:true}));
         });
         const started = Date.now(), count = raw.length / BYTES;
+        let finished=false;
         const send = () => {
+            if(finished) return;
             const n = Math.min(count - 1, Math.floor((Date.now() - started) * FPS / 1000));
-            const frame = raw.slice(n * BYTES, (n + 1) * BYTES);
-            this.refs.forEach((ref) => this.cr.frame(ref, frame, ++this.id));
-            // Hold the final pose only while the indicator remains active, max 12 seconds.
-            if (Date.now() - started >= 12000) this.stop();
+            const source = raw.slice(n * BYTES, (n + 1) * BYTES);
+            const frame = name==='hazards' ? source : composite(name==='left'?source:this.leftPose,name==='right'?source:this.rightPose,W,H);
+            this.heldFrame=frame;
+            this.refs.forEach((ref) => this.cr.frame(ref,frame,++this.id));
+            if (Date.now()-started >= count*1000/FPS) {
+                finished=true;
+                if(name==='left') this.leftPose=Buffer.from(source);
+                if(name==='right') this.rightPose=Buffer.from(source);
+                if(name==='hazards') {this.leftPose=Buffer.from(source);this.rightPose=Buffer.from(source);}
+                this.clearTimer(); this.status='Scene held - Reset scene to start again';
+                // Keep the layer alive without continuously uploading a still at video rate.
+                this.timer=setInterval(()=>this.refs.forEach(ref=>this.cr.frame(ref,this.heldFrame,++this.id)),500);
+                if(done) done();
+            }
         };
-        send(); this.timer = setInterval(send, 1000/FPS); this.status = 'Playing ' + name;
+        this.timer=setInterval(send,1000/FPS); send(); this.status='Playing '+name;
+        return true;
     }
-    stop() { if (this.timer) clearInterval(this.timer); this.timer = null; this.refs.forEach((r) => this.cr.drop(r)); this.refs = []; }
+    clearTimer() {if(this.timer) clearInterval(this.timer);this.timer=null;}
+    stop() {this.clearTimer();this.refs.forEach(r=>this.cr.drop(r));this.refs=[];this.leftPose=null;this.rightPose=null;this.heldFrame=null;}
     close() { this.stop(); this.cr.close(); }
 }
 module.exports = {Player, load, W, H, FPS, BYTES};
