@@ -1,0 +1,14 @@
+{
+  "id":"vgp_indicator_cinema","title":"Indicator Cinema","version":"0.1.0","description":"Three silent indicator animations on cluster map area and HUD. Experimental ID7 build.",
+  "vendor":"VladislavPenchev","license":"MIT","loggingId":"VIC1","iconGlyph":"IC","mguHmi":["ID7"],"autostart":true,"maxDiskUsage":67108864,
+  "requires":{"cluster-render":"0.6.5"},
+  "signals":{"de.bmw.body.Light":{"StatusFunctionsIndicators":"rs"}},
+  "screens":[{"name":"MAIN","kind":"canvas","title":"Indicator Cinema","buttons":[["BTN_LEFT","Test left"],["BTN_RIGHT","Test right"],["BTN_HAZARDS","Test hazards"],["BTN_STOP","Stop"],["BTN_SETTINGS","Settings"]]}],
+  "settings":[
+    {"key":"enabled","label":"Automatic indicator animations","type":"bool","default":false},
+    {"key":"target","label":"Display","type":"choice","default":"map","options":[["map","Cluster map area"],["hud","Head-Up Display"],["both","Cluster and HUD"]]},
+    {"key":"left","label":"Left indicator: woman enters","type":"bool","default":true},
+    {"key":"right","label":"Right indicator: man enters","type":"bool","default":true},
+    {"key":"hazards","label":"Manual hazards: paparazzi scene","type":"bool","default":true}
+  ]
+}

@@ -1,0 +1,1 @@
+{"name":"mgu-indicator-cinema","version":"0.1.0","private":true,"scripts":{"test":"node --test test","preview":"node tools/preview.js","prepare:media":"node tools/prepare-media.js","build:preview":"python kit/tools/build.py --preview-only vgp_indicator_cinema","build":"python kit/tools/build.py vgp_indicator_cinema"}}
