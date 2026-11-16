@@ -1,16 +1,10 @@
 'use strict';
-const zlib = require('zlib');
 const {composite} = require('./composite');
 const {ClusterRender} = require('./cluster_render_client');
-const W = 384, H = 216, FPS = 12, BYTES = W * H * 3 / 2;
-const clips = {};
-function load(name) {
-    if (!clips[name]) {
-        const raw = zlib.gunzipSync(Buffer.from(require('./clip-' + name).data, 'base64'));
-        if (!raw.length || raw.length % BYTES) throw Error('Invalid frame atlas: ' + name);
-        clips[name] = raw;
-    }
-    return clips[name];
+const {Clip,W,H,FPS,BYTES}=require('./clip-reader');
+function initialPose() {
+    const clip=new Clip('left');
+    try {return Buffer.from(clip.read(0));} finally {clip.close();}
 }
 class Player {
     constructor(log, options, client) {
@@ -24,12 +18,16 @@ class Player {
         this.cr.connect();
     }
     play(name, done) {
-        this.clearTimer(); const opt = this.options();
+        const opt = this.options();
         if (!opt[name]) { this.status = name + ' disabled'; return false; }
         if (!this.cr.ready) { this.status = 'Cluster renderer not connected'; return false; }
-        let raw; try { raw = load(name); } catch (e) { this.status = e.message; return false; }
-        if (!this.leftPose) this.leftPose=load('left').slice(0,BYTES);
-        if (!this.rightPose) this.rightPose=load('left').slice(0,BYTES);
+        let clip;
+        try {
+            clip=new Clip(name);
+            if(!this.leftPose) this.leftPose=initialPose();
+            if(!this.rightPose) this.rightPose=initialPose();
+        } catch(e) {if(clip) clip.close();this.status=e.message;return false;}
+        this.clearTimer();this.closeClip();this.clip=clip;
         const destinations = opt.target === 'both' ? ['map','hud'] : [opt.target];
         if (!this.refs.length) destinations.forEach((target) => {
             // Small independent layer, never whole-cluster panel. HUD yields to stock lists.
@@ -38,12 +36,13 @@ class Player {
                 w:hud?512:768, h:hud?288:432, vw:W, vh:H, fps:FPS,
                 exclusive:true, contend:!hud, yield:true, guide_hold:false, stall_ms:1200, pan_blocks:true}));
         });
-        const started = Date.now(), count = raw.length / BYTES;
+        const started = Date.now(), count = clip.frames;
         let finished=false;
         const send = () => {
             if(finished) return;
             const n = Math.min(count - 1, Math.floor((Date.now() - started) * FPS / 1000));
-            const source = raw.slice(n * BYTES, (n + 1) * BYTES);
+            let source;
+            try {source=clip.read(n);} catch(e) {finished=true;this.stop();this.status='Clip read failed: '+e.message;return;}
             const frame = name==='hazards' ? source : composite(name==='left'?source:this.leftPose,name==='right'?source:this.rightPose,W,H);
             this.heldFrame=frame;
             this.refs.forEach((ref) => this.cr.frame(ref,frame,++this.id));
@@ -52,7 +51,7 @@ class Player {
                 if(name==='left') this.leftPose=Buffer.from(source);
                 if(name==='right') this.rightPose=Buffer.from(source);
                 if(name==='hazards') {this.leftPose=Buffer.from(source);this.rightPose=Buffer.from(source);}
-                this.clearTimer(); this.status='Scene held - Reset scene to start again';
+                this.clearTimer(); this.closeClip(); this.status='Scene held - Reset scene to start again';
                 // Keep the layer alive without continuously uploading a still at video rate.
                 this.timer=setInterval(()=>this.refs.forEach(ref=>this.cr.frame(ref,this.heldFrame,++this.id)),500);
                 if(done) done();
@@ -61,8 +60,9 @@ class Player {
         this.timer=setInterval(send,1000/FPS); send(); this.status='Playing '+name;
         return true;
     }
+    closeClip() {if(this.clip) this.clip.close();this.clip=null;}
     clearTimer() {if(this.timer) clearInterval(this.timer);this.timer=null;}
-    stop() {this.clearTimer();this.refs.forEach(r=>this.cr.drop(r));this.refs=[];this.leftPose=null;this.rightPose=null;this.heldFrame=null;}
+    stop() {this.clearTimer();this.closeClip();this.refs.forEach(r=>this.cr.drop(r));this.refs=[];this.leftPose=null;this.rightPose=null;this.heldFrame=null;}
     close() { this.stop(); this.cr.close(); }
 }
-module.exports = {Player, load, W, H, FPS, BYTES};
+module.exports = {Player, W, H, FPS, BYTES};

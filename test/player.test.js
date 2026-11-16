@@ -26,10 +26,10 @@ test('entry completes after lamp release and holds unchanged scene until reset',
  const cr=new Fake(),p=new Player(console,()=>({target:'map',left:true,right:true,hazards:true}),cr);
  try {
   let completed=0;p.play('left',()=>completed++);t.mock.timers.tick(6500);
-  assert.equal(completed,1);assert.equal(cr.layers.size,1);const left=Buffer.from(p.leftPose),held=Buffer.from(p.heldFrame);
+  assert.equal(completed,1);assert.equal(p.clip,null);assert.equal(cr.layers.size,1);const left=Buffer.from(p.leftPose),held=Buffer.from(p.heldFrame);
   t.mock.timers.tick(30000);assert.equal(cr.layers.size,1);assert.deepEqual(p.heldFrame,held);
   p.play('right');t.mock.timers.tick(6500);assert.deepEqual(p.leftPose,left);assert.equal(cr.layers.size,1);
-  p.stop();assert.equal(cr.layers.size,0);assert.equal(p.heldFrame,null);
+  p.stop();assert.equal(cr.layers.size,0);assert.equal(p.heldFrame,null);assert.equal(p.clip,null);assert.equal(p.leftPose,null);assert.equal(p.rightPose,null);
  }finally{p.close();}
 });
 test('YUV composition preserves left and right sides in all three atlas planes',()=>{
@@ -38,4 +38,9 @@ test('YUV composition preserves left and right sides in all three atlas planes',
  for(const base of [0,384*216,384*216+192]) {
   const width=base===0?384:192;assert.equal(frame[base],40);assert.equal(frame[base+width-1],200);
  }
+});
+
+test('reset during playback closes disk reader immediately',()=>{
+ const cr=new Fake(),p=new Player(console,()=>({target:'map',left:true,right:true,hazards:true}),cr);
+ try {p.play('left');const clip=p.clip;assert.notEqual(clip.fd,null);p.stop();assert.equal(clip.fd,null);assert.equal(clip.buffer,null);assert.equal(p.clip,null);}finally{p.close();}
 });

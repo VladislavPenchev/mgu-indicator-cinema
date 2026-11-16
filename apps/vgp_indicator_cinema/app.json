@@ -1,7 +1,7 @@
 {
   "id": "vgp_indicator_cinema",
   "title": "Indicator Cinema",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Three silent indicator animations on cluster map area and HUD. Experimental ID7 build.",
   "vendor": "VladislavPenchev",
   "license": "MIT",

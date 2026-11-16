@@ -33,7 +33,7 @@ To regenerate the bundled atlases after replacing an MP4, install FFmpeg locally
 
 ## Validation and current limits
 
-Version 0.2.0 keeps occupant state in memory until Reset scene, shutdown, or a settings change. Left and right entries finish even if their signal turns off. The other entry queues rather than interrupting; manual hazards queue after both entries. Repeating the same indicator does not make a seated person enter again. Reset scene starts a new sequence; state is not persisted across restarts.
+Version 0.2.1 keeps occupant state in memory until Reset scene, shutdown, or a settings change. Left and right entries finish even if their signal turns off. The other entry queues rather than interrupting; manual hazards queue after both entries. Repeating the same indicator does not make a seated person enter again. Reset scene starts a new sequence; state is not persisted across restarts.
 
 Existing entry videos are combined from image-left and image-right with a feathered seam, retaining the other person's pose. This is not newly generated footage: camera/reflection differences and the transition to the existing hazards clip can remain visible. The hazards clip is the existing paparazzi romantic-comedy scene; a new explicit kissing clip has not been generated. No paid generations are made by this update.
 
@@ -48,3 +48,9 @@ Tests cover both entry orders, lamp release, queued hazards, reset cancellation,
 - Visuals: AI-generated fictional scenes using user-supplied references; no endorsement by BMW, RITUAL, or the portrayed performer is implied. Code licensing does not grant rights to third-party trademarks or likenesses.
 
 Created with OpenAI Codex. No human code review.
+
+## Memory use (0.2.1)
+
+Raw fixed-frame `.pack` files are read by offset from disk. These files are not loaded with the kit pack loader. The player has one reusable source-frame buffer, two pose frames and one composed frame; the clip descriptor and source-buffer reference are released at completion or Reset. There is no base64 module, whole-clip decompression or clip cache. Original MP4s remain build-time inputs only. Retained pose/frame data is about 0.36 MiB while holding, excluding the JS runtime, renderer and protocol buffers. Total application RSS and shared platform limits must still be checked on the car.
+
+`node --expose-gc tools/memory-check.js` runs 20 complete three-clip sequences with the real player and a fake display, checks retained Buffer memory under 2 MiB, then resets. This is a local memory regression check, not a measurement of the car's shared renderer.

@@ -1,6 +1,6 @@
 'use strict';
 // Build-time only. No decoder, subprocess or audio channel is used on the car.
-const {execFileSync}=require('child_process'),fs=require('fs'),path=require('path'),zlib=require('zlib');
+const {execFileSync}=require('child_process'),fs=require('fs'),path=require('path'),crypto=require('crypto');
 const root=path.join(__dirname,'..'),W=384,H=216,FPS=12;
 const sources={left:'left-woman.mp4',right:'right-jason.mp4',hazards:'hazards-paparazzi.mp4'};
 Object.keys(sources).forEach((name)=>{
@@ -14,7 +14,8 @@ Object.keys(sources).forEach((name)=>{
             yuv.copy(atlas,base+luma+r*W+W/2,base+luma+quarter+r*W/2,base+luma+quarter+(r+1)*W/2);
         }
     }
-    const data=zlib.gzipSync(atlas,{level:9}).toString('base64');
-    fs.writeFileSync(path.join(root,'apps/vgp_indicator_cinema','clip-'+name+'.js'),"'use strict';\nmodule.exports="+JSON.stringify({w:W,h:H,fps:FPS,frames:yuv.length/size,data})+';\n');
-    console.log(name,yuv.length/size,'frames',Math.round(data.length/1024),'KB base64');
+    const dest=path.join(root,'apps/vgp_indicator_cinema');
+    fs.writeFileSync(path.join(dest,'clip-'+name+'.pack'),atlas);
+    fs.writeFileSync(path.join(dest,'clip-'+name+'.js'),"'use strict';\nmodule.exports="+JSON.stringify({w:W,h:H,fps:FPS,frames:yuv.length/size,bytes:atlas.length,sha256:crypto.createHash('sha256').update(atlas).digest('hex')})+';\n');
+    console.log(name,yuv.length/size,'frames',Math.round(atlas.length/1024),'KB on disk; one frame read at runtime');
 });
